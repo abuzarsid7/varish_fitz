@@ -1,17 +1,26 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { buildDietPlan, normalizeDietProfile, shapeDietPlanResponse } from "./dietPlanService.js";
 import { buildWorkoutPlan } from "./workoutPlanService.js";
 
-const openaiClient =
-  process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "your_openai_api_key"
-    ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-    : null;
+const getGeminiClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === "your_gemini_api_key") {
+    return null;
+  }
+  return new GoogleGenerativeAI(apiKey);
+};
 
 const safeJsonParse = (value) => {
+  if (!value || typeof value !== "string") return null;
   try {
     return JSON.parse(value);
   } catch {
-    return null;
+    try {
+      const cleaned = value.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+      return JSON.parse(cleaned);
+    } catch {
+      return null;
+    }
   }
 };
 
@@ -171,26 +180,27 @@ export const generatePersonalizedPlans = async (user) => {
   const fallbackWorkout = buildWorkoutPlan(user);
   const fallbackDiet = buildDietPlan(user);
 
-  if (!openaiClient) {
+  const client = getGeminiClient();
+  if (!client) {
     return { workout: fallbackWorkout, diet: fallbackDiet, source: "rule_based" };
   }
 
   try {
-    const response = await openaiClient.chat.completions.create({
-      model: process.env.OPENAI_PLAN_MODEL || "gpt-4o-mini",
-      temperature: 0.5,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an expert fitness coach and nutrition planner. Return only valid JSON and nothing else."
-        },
-        { role: "user", content: aiPrompt(user, fallbackDiet) }
-      ]
+    const model = client.getGenerativeModel({
+      model: process.env.GEMINI_PLAN_MODEL || process.env.GEMINI_MODEL || "gemini-1.5-flash",
+      systemInstruction:
+        "You are an expert fitness coach and nutrition planner. Return only valid JSON and nothing else.",
+      generationConfig: {
+        temperature: 0.5,
+        responseMimeType: "application/json"
+      }
     });
 
-    const content = response.choices?.[0]?.message?.content || "{}";
+    const response = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: aiPrompt(user, fallbackDiet) }] }]
+    });
+
+    const content = response.response?.text() || "{}";
     const parsed = safeJsonParse(content) || {};
     const diet = normalizeDiet(parsed.dietPlan, fallbackDiet, user);
     return { workout: fallbackWorkout, diet, source: "hybrid_ai_diet" };

@@ -6,7 +6,7 @@ A full-stack capstone-level web platform that acts as a virtual personal trainer
 
 - Frontend: React + vite + TailwindCSS + Framer Motion + Recharts
 - Backend: Node.js + Express + MongoDB + JWT
-- AI/CV: MediaPipe Pose (browser) + OpenAI API (chatbot)
+- AI/CV: MediaPipe Pose (browser) + Google Gemini API (chatbot & plan generation)
 
 ## Features
 
@@ -57,7 +57,8 @@ npm run dev
 
 ## Environment Variables
 
-See `server/.env.example`.
+- Backend: See `server/.env.example` (default port `5001`)
+- Frontend: See `client/.env.example` (`VITE_API_BASE_URL`)
 
 ## API Endpoints
 
